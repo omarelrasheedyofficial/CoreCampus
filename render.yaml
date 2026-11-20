@@ -1,0 +1,119 @@
+# render.yaml — Render Blueprint: deploys CampusCore online over HTTPS (doc §3.6, §5.6, §6.5).
+#
+# Four free Render Web Services, one per portal. Each one builds its React app and serves it from
+# its own Express API, so every portal is a single HTTPS address: https://<service>.onrender.com
+# Render issues and renews the TLS certificate and redirects http:// to https:// automatically;
+# the app adds HSTS and the other Helmet security headers (backend/src/config/security.js).
+# The database and file storage stay on Supabase (encrypted connection, DB_SSL=true).
+#
+# Values marked `sync: false` are secrets: Render asks for them when you create the Blueprint
+# and never stores them in this file. Copy them from each portal's local .env / backend/.env.
+
+services:
+  # ───────────────────────────── Student portal ─────────────────────────────
+  - type: web
+    name: campuscore-student
+    runtime: node
+    plan: free
+    region: frankfurt
+    rootDir: student-portal
+    buildCommand: npm ci --include=dev && npm run build && npm ci --prefix backend --omit=dev
+    startCommand: npm start --prefix backend
+    healthCheckPath: /api/health
+    envVars:
+      - { key: NODE_ENV, value: production }
+      - { key: NODE_VERSION, value: 22.19.0 }
+      - { key: DB_SSL, value: "true" }
+      - { key: DATABASE_URL, sync: false }
+      - { key: SUPABASE_URL, sync: false }
+      - { key: SUPABASE_SERVICE_ROLE_KEY, sync: false }
+      - { key: SUPABASE_JWT_SECRET, sync: false }
+      - { key: VITE_SUPABASE_URL, sync: false }
+      - { key: VITE_SUPABASE_ANON_KEY, sync: false }
+      - key: VITE_LECTURER_PORTAL_URL
+        fromService: { type: web, name: campuscore-lecturer, property: host }
+      - key: VITE_LAB_TEACHER_PORTAL_URL
+        fromService: { type: web, name: campuscore-lab-teacher, property: host }
+      - key: VITE_ADMIN_PORTAL_URL
+        fromService: { type: web, name: campuscore-admin, property: host }
+
+  # ───────────────────────────── Lecturer portal ────────────────────────────
+  - type: web
+    name: campuscore-lecturer
+    runtime: node
+    plan: free
+    region: frankfurt
+    rootDir: lecturer-portal
+    buildCommand: npm ci --include=dev && npm run build && npm ci --prefix backend --omit=dev
+    startCommand: npm start --prefix backend
+    healthCheckPath: /api/health
+    envVars:
+      - { key: NODE_ENV, value: production }
+      - { key: NODE_VERSION, value: 22.19.0 }
+      - { key: DB_SSL, value: "true" }
+      - { key: DATABASE_URL, sync: false }
+      - { key: SUPABASE_URL, sync: false }
+      - { key: SUPABASE_SERVICE_ROLE_KEY, sync: false }
+      - { key: SUPABASE_JWT_SECRET, sync: false }
+      - { key: VITE_SUPABASE_URL, sync: false }
+      - { key: VITE_SUPABASE_ANON_KEY, sync: false }
+      - key: VITE_STUDENT_PORTAL_URL
+        fromService: { type: web, name: campuscore-student, property: host }
+      - key: VITE_LAB_TEACHER_PORTAL_URL
+        fromService: { type: web, name: campuscore-lab-teacher, property: host }
+      - key: VITE_ADMIN_PORTAL_URL
+        fromService: { type: web, name: campuscore-admin, property: host }
+
+  # ─────────────────────────── Lab teacher portal ───────────────────────────
+  - type: web
+    name: campuscore-lab-teacher
+    runtime: node
+    plan: free
+    region: frankfurt
+    rootDir: lab-teacher-portal
+    buildCommand: npm ci --include=dev && npm run build && npm ci --prefix backend --omit=dev
+    startCommand: npm start --prefix backend
+    healthCheckPath: /api/health
+    envVars:
+      - { key: NODE_ENV, value: production }
+      - { key: NODE_VERSION, value: 22.19.0 }
+      - { key: DB_SSL, value: "true" }
+      - { key: DATABASE_URL, sync: false }
+      - { key: SUPABASE_URL, sync: false }
+      - { key: SUPABASE_SERVICE_ROLE_KEY, sync: false }
+      - { key: SUPABASE_JWT_SECRET, sync: false }
+      - { key: VITE_SUPABASE_URL, sync: false }
+      - { key: VITE_SUPABASE_ANON_KEY, sync: false }
+      - key: VITE_STUDENT_PORTAL_URL
+        fromService: { type: web, name: campuscore-student, property: host }
+      - key: VITE_LECTURER_PORTAL_URL
+        fromService: { type: web, name: campuscore-lecturer, property: host }
+      - key: VITE_ADMIN_PORTAL_URL
+        fromService: { type: web, name: campuscore-admin, property: host }
+
+  # ────────────────────────── Administrator portal ──────────────────────────
+  - type: web
+    name: campuscore-admin
+    runtime: node
+    plan: free
+    region: frankfurt
+    rootDir: admin-portal
+    buildCommand: npm ci --include=dev && npm run build && npm ci --prefix backend --omit=dev
+    startCommand: npm start --prefix backend
+    healthCheckPath: /api/health
+    envVars:
+      - { key: NODE_ENV, value: production }
+      - { key: NODE_VERSION, value: 22.19.0 }
+      - { key: DB_SSL, value: "true" }
+      - { key: DATABASE_URL, sync: false }
+      - { key: SUPABASE_URL, sync: false }
+      - { key: SUPABASE_SERVICE_ROLE_KEY, sync: false }
+      - { key: SUPABASE_JWT_SECRET, sync: false }
+      - { key: VITE_SUPABASE_URL, sync: false }
+      - { key: VITE_SUPABASE_ANON_KEY, sync: false }
+      - key: VITE_STUDENT_PORTAL_URL
+        fromService: { type: web, name: campuscore-student, property: host }
+      - key: VITE_LECTURER_PORTAL_URL
+        fromService: { type: web, name: campuscore-lecturer, property: host }
+      - key: VITE_LAB_TEACHER_PORTAL_URL
+        fromService: { type: web, name: campuscore-lab-teacher, property: host }
