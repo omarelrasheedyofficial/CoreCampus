@@ -1,6 +1,3 @@
-// config/identity.js — account operations in Supabase Auth (admin portal only).
-// Passwords go straight to Supabase Auth, which hashes them with bcrypt; CampusCore never stores
-// or logs them (doc §6.6.1).
 import { createSupabaseAdmin } from './supabase.js';
 
 /**
@@ -23,10 +20,7 @@ export async function createAuthUser(email, password) {
   return data.user.id;
 }
 
-/**
- * Emails the user a one-time link to choose a new password. The link opens `redirectTo`, which
- * must be listed under Supabase > Authentication > URL Configuration > Redirect URLs.
- */
+
 export async function sendPasswordResetEmail(email, redirectTo) {
   const { error } = await createSupabaseAdmin().auth.resetPasswordForEmail(email, { redirectTo });
   if (error) {
@@ -41,10 +35,7 @@ export async function deleteAuthUser(authUserId) {
   if (error) throw new Error(`Supabase deleteUser failed: ${error.message}`);
 }
 
-/**
- * Blocks or unblocks sign-in at Supabase Auth, so a deactivated account cannot obtain new tokens.
- * (The backend also rejects inactive users on every request.)
- */
+
 export async function setAuthUserBlocked(authUserId, blocked) {
   const { error } = await createSupabaseAdmin().auth.admin.updateUserById(authUserId, {
     ban_duration: blocked ? '876000h' : 'none',

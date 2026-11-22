@@ -1,9 +1,6 @@
-// middleware/error.middleware.js — centralized error handling.
-// (Shared file: keep identical in every portal's backend.)
 import { env } from '../config/env.js';
 import { AUDIT_EVENTS, logAuditEvent } from '../config/audit.js';
 
-/** Expected (operational) error with an HTTP status code and a safe, user-facing message. */
 export class AppError extends Error {
   constructor(message, statusCode = 400) {
     super(message);
@@ -11,7 +8,6 @@ export class AppError extends Error {
   }
 }
 
-// Friendly messages for database constraints the UI can trigger (names from migration 001).
 const CONSTRAINT_MESSAGES = {
   users_email_unique: 'A user with this email already exists.',
   staff_employee_number_key: 'This employee number is already in use.',
@@ -25,7 +21,6 @@ const CONSTRAINT_MESSAGES = {
   enrollments_student_course_unique: 'This student is already enrolled in the course.',
 };
 
-// PostgreSQL error codes → HTTP status
 const PG_STATUS = {
   23505: 409, // unique_violation
   23503: 409, // foreign_key_violation
@@ -36,15 +31,14 @@ export function notFound(req, res) {
   res.status(404).json({ success: false, message: 'Endpoint not found.' });
 }
 
-// Express recognises error handlers by their 4 parameters.
-// eslint-disable-next-line no-unused-vars
 export function errorHandler(err, req, res, next) {
   if (err instanceof AppError) {
-    if (err.statusCode === 403) {
-      // Unauthorized access attempt (doc §6.7): who, what, where — never request bodies or tokens.
+    if (err.statusCode === 401 || err.statusCode === 403) {
+      // Unauthenticated (401) or unauthorized (403) access attempt (doc §6.7):
+      // who, what, where — never request bodies or tokens.
       logAuditEvent({
         userId: req.user?.userId ?? null,
-        eventType: AUDIT_EVENTS.UNAUTHORIZED_ACCESS,
+        eventType: err.statusCode === 401 ? AUDIT_EVENTS.UNAUTHENTICATED_ACCESS : AUDIT_EVENTS.UNAUTHORIZED_ACCESS,
         entityType: 'endpoint',
         entityId: `${req.method} ${req.originalUrl.split('?')[0]}`.slice(0, 60),
         details: { reason: err.message, ip: req.ip },
@@ -53,12 +47,15 @@ export function errorHandler(err, req, res, next) {
     return res.status(err.statusCode).json({ success: false, message: err.message });
   }
 
-  // Malformed JSON body
   if (err.type === 'entity.parse.failed') {
     return res.status(400).json({ success: false, message: 'Invalid JSON body.' });
   }
 
-  // File upload errors raised by multer (size limit, unexpected fields, too many files)
+  // JSON body larger than the express.json limit (100 KB)
+  if (err.type === 'entity.too.large') {
+    return res.status(413).json({ success: false, message: 'The request is too large.' });
+  }
+
   if (err.name === 'MulterError') {
     const tooLarge = err.code === 'LIMIT_FILE_SIZE';
     return res.status(tooLarge ? 413 : 400).json({
@@ -67,7 +64,6 @@ export function errorHandler(err, req, res, next) {
     });
   }
 
-  // Database integrity rules (doc §4.4) violated by a request
   if (PG_STATUS[err.code]) {
     const fallback =
       err.code === '23503'
@@ -81,7 +77,6 @@ export function errorHandler(err, req, res, next) {
     });
   }
 
-  // Unexpected error: log details on the server, never leak them to the client.
   console.error(err);
   res.status(500).json({
     success: false,

@@ -6,6 +6,22 @@ import { watchAwayTimeout } from '../utils/awayTimeout.js';
 const AWAY_TIMEOUT_MS = 60 * 60 * 1000;
 const AuthContext = createContext(null);
 
+// Report incorrect login credentials to CampusCore audit logs (never the password).
+// Best effort: a failed or slow report (max 5 s) never replaces the sign-in error message.
+async function reportFailedLogin(email) {
+  try {
+    const response = await fetch('/api/auth/login-failed', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email }),
+      signal: AbortSignal.timeout(5000),
+    });
+    if (!response.ok) console.warn('[CampusCore] Failed login audit reporting:', response.status);
+  } catch (error) {
+    console.warn('[CampusCore] Unable to report failed login:', error.message);
+  }
+}
+
 export function AuthProvider({ children }) {
   const [authUserId, setAuthUserId] = useState(undefined);
   const [user, setUser] = useState(null);
@@ -79,19 +95,23 @@ export function AuthProvider({ children }) {
     setError('');
     const { error: signInError } = await supabase.auth.signInWithPassword({ email, password });
     if (signInError) {
-      if (signInError.code === 'invalid_credentials') {
-        throw new Error('Incorrect email or password.');
+      try {
+        const response = await fetch('/api/auth/login-failed', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ email }),
+        });
+
+        if (!response.ok) {
+          console.warn('Failed login audit reporting:', response.status);
+        }
+      } catch (error) {
+        console.warn('Unable to report failed login');
       }
-      if (signInError.code === 'email_not_confirmed') {
-        throw new Error('Confirm your email before signing in.');
-      }
-      if (signInError.status === 429) {
-        throw new Error('Too many sign-in attempts. Please wait a few minutes and try again.');
-      }
-      if (signInError.name === 'AuthRetryableFetchError' || signInError.status === 0) {
-        throw new Error('Cannot reach the sign-in service. Please try again.');
-      }
-      throw new Error('The sign-in service is unavailable. Please try again later.');
+
+      throw new Error('Incorrect email or password.');
     }
   }, []);
 

@@ -2,15 +2,22 @@ import { query } from './db.js';
 
 export const AUDIT_EVENTS = Object.freeze({
   UNAUTHORIZED_ACCESS: 'unauthorized_access',
+  UNAUTHENTICATED_ACCESS: 'unauthenticated_access',
   GRADE_CHANGED: 'grade_changed',
   ROLE_CHANGED: 'role_changed',
   ACCOUNT_STATUS_CHANGED: 'account_status_changed',
   ACCOUNT_CREATED: 'account_created',
   PASSWORD_CHANGED: 'password_changed',
   PASSWORD_RESET_SENT: 'password_reset_sent',
+  LOGIN_FAILED: 'login_failed',
 });
 
-export async function logAuditEvent({ userId = null, eventType, entityType = null, entityId = null, details = null }) {
+// By default a failed audit write is logged and swallowed, so it never breaks the action being
+// audited. Pass { rethrow: true } when the audit record IS the action (e.g. login_failed reports).
+export async function logAuditEvent(
+  { userId = null, eventType, entityType = null, entityId = null, details = null },
+  { rethrow = false } = {},
+) {
   try {
     await query(
       `INSERT INTO audit_logs (user_id, event_type, entity_type, entity_id, details)
@@ -19,5 +26,6 @@ export async function logAuditEvent({ userId = null, eventType, entityType = nul
     );
   } catch (err) {
     console.error(`Audit log write failed (${eventType}):`, err.message);
+    if (rethrow) throw err;
   }
 }

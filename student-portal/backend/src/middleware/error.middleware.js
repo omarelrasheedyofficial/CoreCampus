@@ -40,11 +40,12 @@ export function notFound(req, res) {
 // eslint-disable-next-line no-unused-vars
 export function errorHandler(err, req, res, next) {
   if (err instanceof AppError) {
-    if (err.statusCode === 403) {
-      // Unauthorized access attempt (doc §6.7): who, what, where — never request bodies or tokens.
+    if (err.statusCode === 401 || err.statusCode === 403) {
+      // Unauthenticated (401) or unauthorized (403) access attempt (doc §6.7):
+      // who, what, where — never request bodies or tokens.
       logAuditEvent({
         userId: req.user?.userId ?? null,
-        eventType: AUDIT_EVENTS.UNAUTHORIZED_ACCESS,
+        eventType: err.statusCode === 401 ? AUDIT_EVENTS.UNAUTHENTICATED_ACCESS : AUDIT_EVENTS.UNAUTHORIZED_ACCESS,
         entityType: 'endpoint',
         entityId: `${req.method} ${req.originalUrl.split('?')[0]}`.slice(0, 60),
         details: { reason: err.message, ip: req.ip },
@@ -56,6 +57,11 @@ export function errorHandler(err, req, res, next) {
   // Malformed JSON body
   if (err.type === 'entity.parse.failed') {
     return res.status(400).json({ success: false, message: 'Invalid JSON body.' });
+  }
+
+  // JSON body larger than the express.json limit (100 KB)
+  if (err.type === 'entity.too.large') {
+    return res.status(413).json({ success: false, message: 'The request is too large.' });
   }
 
   // File upload errors raised by multer (size limit, unexpected fields, too many files)

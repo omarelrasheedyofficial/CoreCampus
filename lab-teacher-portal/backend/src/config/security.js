@@ -17,6 +17,7 @@ function limiter(limit, message) {
 export const apiLimiter = limiter(600, 'Too many requests. Please wait a few minutes and try again.');
 
 export const uploadLimiter = limiter(40, 'Too many uploads. Please wait a few minutes and try again.');
+export const authLimiter = limiter(10, 'Too many requests. Please wait a few minutes and try again.');
 
 export function securityHeaders() {
   return helmet({

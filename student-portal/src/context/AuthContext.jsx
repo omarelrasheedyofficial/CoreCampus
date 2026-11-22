@@ -9,6 +9,22 @@ import { watchAwayTimeout } from '../utils/awayTimeout.js';
 const AWAY_TIMEOUT_MS = 60 * 60 * 1000;
 const AuthContext = createContext(null);
 
+// Report incorrect login credentials to CampusCore audit logs (never the password).
+// Best effort: a failed or slow report (max 5 s) never replaces the sign-in error message.
+async function reportFailedLogin(email) {
+  try {
+    const response = await fetch('/api/auth/login-failed', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email }),
+      signal: AbortSignal.timeout(5000),
+    });
+    if (!response.ok) console.warn('[CampusCore] Failed login audit reporting:', response.status);
+  } catch (error) {
+    console.warn('[CampusCore] Unable to report failed login:', error.message);
+  }
+}
+
 export function AuthProvider({ children }) {
   const [authUserId, setAuthUserId] = useState(undefined); // undefined = still checking
   const [user, setUser] = useState(null);
@@ -86,7 +102,22 @@ export function AuthProvider({ children }) {
     setError('');
     const { error: signInError } = await supabase.auth.signInWithPassword({ email, password });
     if (signInError) {
-      // Same message for unknown email and wrong password (no account enumeration).
+      try {
+        const response = await fetch('/api/auth/login-failed', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ email }),
+        });
+
+        if (!response.ok) {
+          console.warn('Failed login audit reporting:', response.status);
+        }
+      } catch (error) {
+        console.warn('Unable to report failed login');
+      }
+
       throw new Error('Incorrect email or password.');
     }
   }, []);

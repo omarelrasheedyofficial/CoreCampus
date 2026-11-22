@@ -17,15 +17,22 @@ function sslConfig() {
     // Full verification of the Supabase server certificate.
     return { ca: fs.readFileSync(env.dbSslCaPath, 'utf8'), rejectUnauthorized: true };
   }
-  // Encrypted connection without CA pinning (tightened in the security phase via DB_SSL_CA_PATH).
-  return { rejectUnauthorized: false };
+  // No insecure fallback: SSL without a CA certificate would skip server verification.
+  throw new Error('DB_SSL_CA_PATH is required when DB_SSL=true');
 }
 
 // The database is remote (Supabase pooler): opening a TLS connection costs ~0.5–3 s and the
 // network sometimes drops sockets. So keep a couple of connections open and alive, and retry
 // when a connection (not a query) fails.
+// pg mis-parses usernames that contain a dot (e.g. Supabase pooler "postgres.<ref>"),
+// so we pass every field individually instead of using connectionString.
+const _dbUrl = new URL(env.databaseUrl);
 const pool = new Pool({
-  connectionString: env.databaseUrl,
+  host: _dbUrl.hostname,
+  port: Number(_dbUrl.port) || 5432,
+  database: _dbUrl.pathname.replace(/^\//, ''),
+  user: decodeURIComponent(_dbUrl.username),
+  password: decodeURIComponent(_dbUrl.password),
   ssl: sslConfig(),
   max: 10,
   min: 2, // never evict below this, so requests after a quiet period don't pay a new handshake
@@ -99,8 +106,7 @@ export async function withTransaction(fn) {
     return result;
   } catch (err) {
     broken = isConnectionError(err);
-    // A failed ROLLBACK on a dead connection must not hide the original error.
-    if (!broken) await client.query('ROLLBACK').catch(() => {});
+    if (!broken) await client.query('ROLLBACK').catch(() => { });
     throw err;
   } finally {
     client.release(broken || undefined);
